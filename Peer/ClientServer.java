@@ -8,7 +8,6 @@ import java.io.*;
 import java.net.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Scanner;
 
 //PeerServer
@@ -101,6 +100,35 @@ class ListenerPort implements Runnable {
 				ioException.printStackTrace();
 			}
 		}
+		if(listen_port == 9003){
+			try{
+				server = new ServerSocket(9003);
+				while (true) {                                                                       //Listen for Download request
+					connection = server.accept();
+					System.out.println("Connection Received From " + connection.getInetAddress().getHostName()+" For Download\n");
+					ObjectInputStream in = new ObjectInputStream(connection.getInputStream());
+					connectionMsg = (String)in.readObject();
+					String filename = connectionMsg.split("$")[0];
+					String addedcontent = connectionMsg.split("$")[1];
+					ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
+					out.flush();
+					String str="";
+
+					File f = new File(filename);
+					BufferedWriter bw = new BufferedWriter(new FileWriter(f, true));
+					bw.append(addedcontent);
+					bw.close();
+					connection.close();
+				}
+			}
+
+			catch(ClassNotFoundException noclass){                                            //To Handle Exception for Data Received in Unsupported or Unknown Formats
+				System.err.println("Data Received in Unknown Format");
+			}
+			catch(IOException ioException){                                                   //To Handle Input-Output Exceptions
+				ioException.printStackTrace();
+			}
+		}
 
 	}
 }
@@ -139,18 +167,12 @@ public class ClientServer {
 		System.out.println("||                                       MENU:                                            ||");
 		System.out.println("||========================================================================================||");
 
-//		System.out.println("Enter 3 digit Peer iD");
-//		Scanner in = new Scanner(System.in);
-//		peer_id = Integer.parseInt(in.nextLine().trim());
-//		System.out.println("Peer Id is:" + peer_id);
 		FileDownload();
 
 		while (true){
 
-			//  System.out.println("\n");
 			System.out.println("============================================================================================\n");
 			System.out.println("Enter The Option :\n==================\n1. Registering the File \n \n2. Searching On CentralIndxServer \n \n3. Downloading From Peer Server \n \n4. Delete from CentralIndxServer \n \n5. Restore File  \n \n6.Create New File  \n \n7.Update File  \n \n8.Read File  \n \n9. Exit\n");
-			//String mac = getmac();
 			Scanner in = new Scanner(System.in);
 			regmessage = in.nextLine();
 			if (regmessage.equals("1")){
@@ -163,7 +185,7 @@ public class ClientServer {
 				val = regmessage.split(" ");                        //Split the peerid and filename separated with a space
 				//int PearPort  = Integer.parseInt(val[0]);
 
-				RegisterWithIServer(val[1]);
+				RegisterWithIServer(val[1],"");
 
 				AttendFileDownloadRequest();
 
@@ -181,7 +203,12 @@ public class ClientServer {
 				if(!searchInServer(searchfilename)){
 					System.out.println("Enter Content to insert");
 					String fileContent = in.nextLine();
-					createFileInSystem(fileName,fileContent);
+					System.out.println("Assign File Permission for File Type");
+					System.out.println("1 - read only");
+					System.out.println("2 - read and write");
+					System.out.println("3 - private");
+					String filePermission = in.nextLine();
+					createFileInSystem(fileName,fileContent,filePermission);
 				}else{
 					System.out.println("File exist already please use update option");
 				}
@@ -197,15 +224,18 @@ public class ClientServer {
 				if(!searchInServer(searchfilename)){
 					System.out.println("File not found Please create new File");
 					String fileContent = in.nextLine();
-					createFileInSystem(fileName,fileContent);
+					createFileInSystem(fileName,fileContent,"");
 				}else{
-					File f = new File(fileName);
-					System.out.println("Enter Content to insert");
-					String fileContent = in.nextLine();
-					BufferedWriter bw = new BufferedWriter(new FileWriter(f, true));
-					bw.append(fileContent);
-					bw.close();
-					System.out.println("File exist already please use update option");
+					if(!searchInServer(searchfilename)){
+						File f = new File(fileName);
+						System.out.println("Enter Content to insert");
+						String fileContent = in.nextLine();
+						BufferedWriter bw = new BufferedWriter(new FileWriter(f, true));
+						bw.append(fileContent);
+						bw.close();
+						updateReplicates(fileName,fileContent);
+					}
+
 				}
 			}
 			if (regmessage.equals("8")){
@@ -227,7 +257,40 @@ public class ClientServer {
 		ClientServer psFrame = new ClientServer();
 
 	}
-	public void RegisterWithIServer(String file_name)                             //Register with CentralIndxServer Method
+
+	public void updateReplicates(String filename, String filecontent){
+		try {
+			requestSocket = new Socket(ServerIp, 2003);
+			System.out.println("\nUpdate Replicated files\n");
+			//2. To Get Input and Output streams
+			out = new ObjectOutputStream(requestSocket.getOutputStream());
+			out.flush();
+			out.writeObject(filename);
+			out.flush();
+			ObjectInputStream in = new ObjectInputStream(requestSocket.getInputStream());
+			String peerAndIps = (String) in.readObject();
+			out.close();
+			requestSocket.close();
+			String ips[] = peerAndIps.split(";");
+			for (String ipList : ips) {
+				requestSocket = new Socket(String.valueOf(ips), 9003);
+				System.out.println("\nConnected to peerid : "+"\n");
+				//2. To Get Input and Output streams
+				out = new ObjectOutputStream(requestSocket.getOutputStream());
+				out.flush();
+				out.writeObject(searchfilename);
+				out.flush();
+				requestSocket.close();
+
+			}
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		} catch (ClassNotFoundException e) {
+			throw new RuntimeException(e);
+		}
+
+	}
+	public void RegisterWithIServer(String file_name,String filePermission)                             //Register with CentralIndxServer Method
 	{
 		try {
 			//1. Creating a socket to connect to the server
@@ -236,18 +299,18 @@ public class ClientServer {
 			//2. To Get Input and Output streams
 			out = new ObjectOutputStream(requestSocket.getOutputStream());
 			out.flush();
+			regmessage = regmessage+" "+filePermission;
 			out.writeObject(regmessage);
 			System.out.println("Registered Successfully!!\n");
 			out.flush();
-			//out.close();
-			//requestSocket.close();
-			//
+
 			ObjectInputStream in = new ObjectInputStream(requestSocket.getInputStream());
-			List<String> peerAndIps = (List<String>) in.readObject();
+			String peerAndIps = (String) in.readObject();
 			out.close();
 			requestSocket.close();
-			for (String ipList : peerAndIps) {
-				requestSocket = new Socket(ServerIp, 8002);
+			String ips[] = peerAndIps.split(";");
+			for (String ipList : ips) {
+				requestSocket = new Socket(ipList, 9002);
 
 				File myFile = new File(file_name);
 				byte[] mybytearray = new byte[(int) myFile.length()];
@@ -287,28 +350,23 @@ public class ClientServer {
 				ioException.printStackTrace();
 			}
 		}
-
 	}
 
-		public void createFileInSystem(String filename,String filecontent){
+		public void createFileInSystem(String filename,String filecontent,String filePermission){
 
 		Path fileNameObj = Path.of(filename);
 		try {
 			Files.writeString(fileNameObj, filecontent);
 			regmessage = "1001 "+ filename;
-			RegisterWithIServer(filename);                          //Register Method call
+			RegisterWithIServer(filename,filePermission);                          //Register Method call
 			AttendFileDownloadRequest();
 		} catch (IOException e) {
 			System.err.println("Error while file creation");
 			throw new RuntimeException(e);
 		}
 
-
 	}
 
-	public void updateFile(){
-
-	}
 	public void SearchWithIServer(String value)                              //Search on the CentralIndexServer Method
 	{
 			if(value.equals("2")){
@@ -339,6 +397,9 @@ public class ClientServer {
 			ObjectInputStream in = new ObjectInputStream(requestSocket.getInputStream());
 			String strVal = (String)in.readObject();
 			//  For File Not Found Print Condition
+			if(strVal.equals("File is being used by other user please try again later") || strVal.equals("File is Locked You can continue Edit")){
+				return false;
+			}
 			if  (strVal.equals("File Not Found\n")) {
 
 				System.out.println("FILE Does Not Exist !!\n");
