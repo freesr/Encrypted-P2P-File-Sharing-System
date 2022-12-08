@@ -89,7 +89,6 @@ class ListenerPort implements Runnable {
 						output.write(buffer, 0, bytesRead);
 						size -= bytesRead;
 					}
-
 					output.close();
 
 
@@ -108,8 +107,9 @@ class ListenerPort implements Runnable {
 					System.out.println("Connection Received From " + connection.getInetAddress().getHostName()+" For Download\n");
 					ObjectInputStream in = new ObjectInputStream(connection.getInputStream());
 					connectionMsg = (String)in.readObject();
-					String filename = connectionMsg.split("$")[0];
-					String addedcontent = connectionMsg.split("$")[1];
+					int index = connectionMsg.indexOf("$");
+					String filename = connectionMsg.substring(0,index);
+					String addedcontent = connectionMsg.substring(index+1,connectionMsg.length());
 					ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
 					out.flush();
 					String str="";
@@ -144,7 +144,9 @@ public class ClientServer {
 	Socket requestSocket;
 
 	public ClientServer() throws IOException {
-
+		AttendFileDownloadRequest();
+		FileReplicate();
+		FileDownload();
 
 		try
 		{
@@ -160,14 +162,12 @@ public class ClientServer {
 			System.out.println("Could not read indexserver ip from indxip.txt");
 		}
 
-
 		System.out.println("||========================================================================================||");
 		System.out.println("||                           PEER-TO-PEER FILE SHARING SYSTEM                             ||");
 		System.out.println("||                       ========================================                         ||");
 		System.out.println("||                                       MENU:                                            ||");
 		System.out.println("||========================================================================================||");
 
-		FileDownload();
 
 		while (true){
 
@@ -178,20 +178,16 @@ public class ClientServer {
 			if (regmessage.equals("1")){
 
 				System.out.println("Enter the String in Format: 4Digit id and File Names separated by Space");
-				//	Scanner in = new Scanner(System.in);  
 				regmessage = in.nextLine();
-				//To Collect peer/client id from input string
 				String[] val;
-				val = regmessage.split(" ");                        //Split the peerid and filename separated with a space
-				//int PearPort  = Integer.parseInt(val[0]);
+				val = regmessage.split(" ");
 
 				RegisterWithIServer(val[1],"");
 
-				AttendFileDownloadRequest();
 
 			}		
 			if (regmessage.equals("2") || regmessage.equals("4") || regmessage.equals("5")){
-				SearchWithIServer(regmessage);                            //Search Method call
+				SearchWithIServer(regmessage);                            //call for searching
 			}
 			if (regmessage.equals("3")){
 				DownloadFromPeerServer(regmessage);                       //Download Method call
@@ -220,12 +216,13 @@ public class ClientServer {
 				String fileName = in.nextLine();
 				System.out.println("Enter File Name");
 				//SearchWithIServer(regmessage);
-				searchfilename = fileName+"$2";
+				searchfilename = fileName+"$0";
 				if(!searchInServer(searchfilename)){
 					System.out.println("File not found Please create new File");
 					String fileContent = in.nextLine();
 					createFileInSystem(fileName,fileContent,"");
 				}else{
+					searchfilename = fileName+"$7";
 					if(!searchInServer(searchfilename)){
 						File f = new File(fileName);
 						System.out.println("Enter Content to insert");
@@ -272,17 +269,23 @@ public class ClientServer {
 			out.close();
 			requestSocket.close();
 			String ips[] = peerAndIps.split(";");
-			for (String ipList : ips) {
-				requestSocket = new Socket(String.valueOf(ips), 9003);
+			for (String ip : ips) {
+				requestSocket = new Socket(ip, 9003);
 				System.out.println("\nConnected to peerid : "+"\n");
-				//2. To Get Input and Output streams
 				out = new ObjectOutputStream(requestSocket.getOutputStream());
 				out.flush();
-				out.writeObject(searchfilename);
+				out.writeObject(filename+"$"+filecontent);
 				out.flush();
 				requestSocket.close();
-
 			}
+
+			requestSocket = new Socket(ServerIp, 2004);
+			//2. To Get Input and Output streams
+			out = new ObjectOutputStream(requestSocket.getOutputStream());
+			out.flush();
+			out.writeObject(filename);
+			out.flush();
+
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		} catch (ClassNotFoundException e) {
@@ -296,12 +299,11 @@ public class ClientServer {
 			//1. Creating a socket to connect to the server
 			requestSocket = new Socket(ServerIp, 2001);
 			System.out.println("\nConnected to Register on CentralIndxServer on port 2001\n");
-			//2. To Get Input and Output streams
 			out = new ObjectOutputStream(requestSocket.getOutputStream());
 			out.flush();
 			regmessage = regmessage+" "+filePermission;
 			out.writeObject(regmessage);
-			System.out.println("Registered Successfully!!\n");
+			System.out.println("File Registered \n");
 			out.flush();
 
 			ObjectInputStream in = new ObjectInputStream(requestSocket.getInputStream());
@@ -312,22 +314,23 @@ public class ClientServer {
 			for (String ipList : ips) {
 				requestSocket = new Socket(ipList, 9002);
 
-				File myFile = new File(file_name);
-				byte[] mybytearray = new byte[(int) myFile.length()];
+				File file = new File(file_name);
 
-				FileInputStream fis = new FileInputStream(myFile);
+				byte[] byte_array = new byte[(int) file.length()];
+
+				FileInputStream fis = new FileInputStream(file);
+
 				BufferedInputStream bis = new BufferedInputStream(fis);
 
 				DataInputStream dis = new DataInputStream(bis);
-				dis.readFully(mybytearray, 0, mybytearray.length);
+				dis.readFully(byte_array, 0, byte_array.length);
 
 				OutputStream os = requestSocket.getOutputStream();
 
-				//Sending file name and file size to the server
 				DataOutputStream dos = new DataOutputStream(os);
-				dos.writeUTF(myFile.getName());
-				dos.writeLong(mybytearray.length);
-				dos.write(mybytearray, 0, mybytearray.length);
+				dos.writeUTF(file.getName());
+				dos.writeLong(byte_array.length);
+				dos.write(byte_array, 0, byte_array.length);
 				dos.flush();
 				out.close();
 				requestSocket.close();
@@ -338,6 +341,7 @@ public class ClientServer {
 		}
 		catch(IOException ioException){                                                      //To Handle Input-Output Exception
 			ioException.printStackTrace();
+			System.err.println("Error Please try again");
 		} catch (ClassNotFoundException ex) {
 			throw new RuntimeException(ex);
 		} finally{
@@ -359,7 +363,7 @@ public class ClientServer {
 			Files.writeString(fileNameObj, filecontent);
 			regmessage = "1001 "+ filename;
 			RegisterWithIServer(filename,filePermission);                          //Register Method call
-			AttendFileDownloadRequest();
+			//AttendFileDownloadRequest();
 		} catch (IOException e) {
 			System.err.println("Error while file creation");
 			throw new RuntimeException(e);
@@ -388,17 +392,22 @@ public class ClientServer {
 
 			//1. Creating a socket to connect to the Index server
 			requestSocket = new Socket(ServerIp, 2002);
-			System.out.println("\nConnected to Search on CentralIndxServer on port 2002\n");
+			System.out.println("\nSearching in server\n");
 			//2. To Get Input and Output streams
 			out = new ObjectOutputStream(requestSocket.getOutputStream());
 			out.flush();
-			out.writeObject(searchfilename);                                            //Writes the Search Filename to the Output Stream
+			out.writeObject(filename);
 			out.flush();
 			ObjectInputStream in = new ObjectInputStream(requestSocket.getInputStream());
 			String strVal = (String)in.readObject();
 			//  For File Not Found Print Condition
-			if(strVal.equals("File is being used by other user please try again later") || strVal.equals("File is Locked You can continue Edit")){
+			if(strVal.equals("File is being used by other user please try again later")  ){
+				System.out.println(strVal);
 				return false;
+			}
+			if(strVal.equals("File Found")  ){
+				System.out.println(strVal);
+				return true;
 			}
 			if  (strVal.equals("File Not Found\n")) {
 
@@ -430,7 +439,7 @@ public class ClientServer {
 			}
 		}
 		//check this true
-		return true;
+		return false;
 	}
 
 	public void writetoFile(String s)
@@ -520,6 +529,14 @@ public class ClientServer {
 		Thread sthread = new Thread (new ListenerPort(9002));
 		sthread.setName("AttendFileDownloadRequest");
 		sthread.start();
+
+	}
+
+	public void FileReplicate()
+	{
+		Thread rthread = new Thread (new ListenerPort(9003));
+		rthread.setName("AttendFileDownloadRequest");
+		rthread.start();
 
 	}
 

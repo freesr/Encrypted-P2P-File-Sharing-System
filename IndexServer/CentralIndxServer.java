@@ -44,22 +44,22 @@ class PortListener implements Runnable {
 
 	/* Beginning of Run Method */	
 	public void run() {
-		if(port==2001)                                  //Listening For Register on port 2001
+		if(port==2001)               //Listening on 2001 for registration
 		{
 			try {
 				server = new ServerSocket(2001);
 				while (true) {
 					connection = server.accept();
 					String ipstring = connection.getInetAddress().getHostName();
-					System.out.println("Connection Received From " +ipstring+ " For Registration");
+					System.out.println("Connection Received For Registration");
 					ObjectInputStream in = new ObjectInputStream(connection.getInputStream());
 					strVal = (String)in.readObject();
 					System.out.println(strVal);
-					System.out.println("<====Registered====>\n");
+					System.out.println("File Registered ");
 					//Split string "strVal" using Space as Delimeter store as {peerid ,filename} format;
 					String[] var;
 					var = strVal.split(" ");
-					int aInt = Integer.parseInt(var[0]);
+					//int aInt = Integer.parseInt(var[0]);
 
 					/* print substrings */
 					try{
@@ -71,26 +71,25 @@ class PortListener implements Runnable {
 						Statement stmt = conn.createStatement();
 						String sql;
 
-
-						for(int x = 1; x < var.length ; x++){
-							sql = "INSERT into FileMap values('" + var[x]+ "','" + ipstring + "'," + aInt + "," +0+ ","+var[2]+"')";
+						//for(int x = 1; x < var.length-1 ; x++){
+							sql = "INSERT into FileMap values('" + var[1]+ "','" + ipstring + "'," + var[0] + "," +0+ ","+ var[2] +",'',"+0+")";
 							ResultSet rs = stmt.executeQuery(sql);
 							System.out.println(
 									"inserted successfully : " + rs);
 
-						}
-						sql = "select distinct peerid,ipaddress from FileMap where HOSTIPADDRESS NOT IN ("+ ipstring+") ORDER BY DBMS_RANDOM.RANDOM  fetch  first 3 rows only";
-						ResultSet rs = stmt.executeQuery(sql);
+						//}
+						sql = "select distinct hostipaddress from FileMap where HOSTIPADDRESS NOT IN ('"+ ipstring+"') ORDER BY DBMS_RANDOM.RANDOM  fetch  first 3 rows only";
+						ResultSet resultSet = stmt.executeQuery(sql);
 //						List<String> peersAndIps = new ArrayList<String>();
-						String IpList = ""+connection.getInetAddress().getHostName()+";";
-						while (rs.next()) {
+						String IpList = "";//+connection.getInetAddress().getHostName()+";";
+						while (resultSet.next()) {
 							//peersAndIps.add(rs.getString(2));
-							IpList += (rs.getString(2)+";");
+							IpList += (resultSet.getString(1)+";");
 						}
 						IpList = IpList.substring(0,IpList.length()-1);
-						IpList = "127.0.0.1";
-//						sql = "update FileMap set REPLICATE_IPADDRESS ="+IpList+" where filename="+var[1];
-//						ResultSet rs1 = stmt.executeQuery(sql);
+						//IpList = "127.0.0.1";
+						sql = "update FileMap set REPLICATE_IPADDRESS ='"+IpList+"' where filename='"+var[1]+"'";
+						stmt.executeQuery(sql);
 						ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
 						out.flush();
 						out.writeObject(IpList);                        //Write the List of peer id's to the output stream
@@ -134,8 +133,13 @@ class PortListener implements Runnable {
 					Class.forName(JDBC_Driver_Class);
 					Connection conn = DriverManager.getConnection(DB_URL, USER, PASS);
 					Statement stmt = conn.createStatement();
-					String sql = "SELECT * from  FileMap where filename ='"+strVal+"' and deleted = 0";
-					//String sql = "SELECT * from  FileMap where filename ='"+strVal+"' and deleted = 0 union SELECT * from  FileMap where HOSTIPADDRESS ='"+senderIp+"' and deleted = 0";
+					String sql;
+					if(action_type.equals("0")){
+						sql = "SELECT * from  FileMap where filename ='"+strVal+"' and deleted = 0 and file_permission in (1,2) union SELECT * from  FileMap where HOSTIPADDRESS ='"+senderIp+"' and deleted = 0";
+						//action_type = "7";
+					}else{
+						sql = "SELECT * from  FileMap where filename ='"+strVal+"' and deleted = 0 and file_permission in (1,2)";
+					}
 					if(action_type.equals("5")){
 						sql = sql.replaceAll("and deleted = 0","");
 					}
@@ -153,15 +157,20 @@ class PortListener implements Runnable {
 							stmt.executeQuery(sql);
 							retval = "File Deletion Succesful";
 						}else if(action_type.equals("7")){
-							sql = "select is_locked from filemap where filename="+strVal+" and deleted = 0";
+							sql = "select is_locked from filemap where filename='"+strVal+"' and deleted = 0";
 							ResultSet rs1 = stmt.executeQuery(sql);
-							if(rs1.getString(0).equals(""+1)){
+							rs1.next();
+							if(rs1.getInt(1) == 1){
 								retval = "File is being used by other user please try again later";
 							}else{
-								sql = "update filemap set  is_locked = 1 where filename="+strVal+" and deleted = 0";
+								sql = "update filemap set  is_locked = 1 where filename='"+strVal+"' and deleted = 0";
 								stmt.executeQuery(sql);
 								retval = "File is Locked You can continue Edit";
 							}
+						}else if(action_type.equals("0")){
+//							sql = "UPDATE FileMap set deleted = 1 where filename ='"+strVal+"'";
+//							stmt.executeQuery(sql);
+							retval = "File Found";
 						}else{
 							sql = "UPDATE FileMap set deleted = 0 where filename ='"+strVal+"'";
 							stmt.executeQuery(sql);
@@ -196,7 +205,7 @@ class PortListener implements Runnable {
 
 		}
 
-		if(port==2003)                                //Listening for Search on port 2002
+		if(port==2003)                                //Listening for Search on port 2003
 		{
 			try {
 				server = new ServerSocket(2003);
@@ -207,8 +216,8 @@ class PortListener implements Runnable {
 					System.out.println("Connection Received From " +senderIp+ " For Search");
 					ObjectInputStream in = new ObjectInputStream(connection.getInputStream());
 					strVal = (String)in.readObject();
-					String action_type = strVal.substring(strVal.length()-1);
-					strVal = strVal.substring(0,strVal.length()-2);
+					//String action_type = strVal.substring(strVal.length()-1);
+					//strVal = strVal.substring(0,strVal.length()-2);
 					String retval = "";
 					//	Peer-id's separated by space are returned for given file
 					System.out.println("Database connect");
@@ -219,27 +228,14 @@ class PortListener implements Runnable {
 					Statement stmt = conn.createStatement();
 					String sql;
 
-
-//					for(int x = 1; x < var.length ; x++){
-//						sql = "INSERT into FileMap values('" + var[x]+ "','" + ipstring + "'," + aInt + "," +0+ ","+var[2]+"')";
-//						ResultSet rs = stmt.executeQuery(sql);
-//						System.out.println(
-//								"inserted successfully : " + rs);
-//
-//					}
-					sql = "select HOSTIPADDRESS From filemap where filename="+strVal;
+					sql = "select Replicate_IPADDRESS From filemap where filename='"+strVal+"'";
 					ResultSet rs = stmt.executeQuery(sql);
-					String IpList = rs.getString(0);
-////						List<String> peersAndIps = new ArrayList<String>();
-//					String IpList = ""+connection.getInetAddress().getHostName()+";";
-//					while (rs.next()) {
-//						//peersAndIps.add(rs.getString(2));
-//						IpList += (rs.getString(2)+";");
-//					}
-//					IpList = IpList.substring(0,IpList.length()-1);
-//					IpList = "192.168.0.63;";
-////						sql = "update FileMap set REPLICATE_IPADDRESS ="+IpList+" where filename="+var[1];
-////						ResultSet rs1 = stmt.executeQuery(sql);
+					String IpList = "";
+					if(rs.next()){
+						IpList = rs.getString(1);
+					}
+
+
 					ObjectOutputStream out = new ObjectOutputStream(connection.getOutputStream());
 					out.flush();
 					out.writeObject(IpList);                        //Write the List of peer id's to the output stream
@@ -261,6 +257,41 @@ class PortListener implements Runnable {
 
 		}
 
+		if(port==2004)                                //Listening for Search on port 2003
+		{
+			try {
+				server = new ServerSocket(2004);
+
+				while (true) {
+					connection = server.accept();
+					String senderIp = connection.getInetAddress().getHostName();
+					ObjectInputStream in = new ObjectInputStream(connection.getInputStream());
+					strVal = (String)in.readObject();
+
+
+					System.out.println("Database connect");
+					DriverManager.registerDriver(new oracle.jdbc.OracleDriver());
+
+					Class.forName(JDBC_Driver_Class);
+					Connection conn = DriverManager.getConnection(DB_URL, USER, PASS);
+					Statement stmt = conn.createStatement();
+					String sql;
+					sql = "update filemap set  is_locked = 0 where filename='"+strVal+"' and deleted = 0";
+					stmt.executeQuery(sql);
+					conn.close();
+				}
+			}
+
+			catch(ClassNotFoundException noclass){                                      //To Handle Exceptions for Data Received in Unsupported/Unknown Formats
+				System.err.println("Data Received in Unknown Format");
+			}
+			catch(IOException ioException){                                             //To Handle Input-Output Exceptions
+				ioException.printStackTrace();
+			} catch (SQLException e) {
+				throw new RuntimeException(e);
+			}
+		}
+
 	}
 }
 
@@ -271,6 +302,8 @@ public class CentralIndxServer {
 	public CentralIndxServer() {
 		RegisterRequestThread();                           //RegisterRequest and SearchRequest Threads
 		SearchRequestThread();
+		FileUpdateThread();
+		FileUnlockThread();
 	}
 
 	public static void main(String[] args) {
@@ -305,6 +338,14 @@ public class CentralIndxServer {
 		Thread futhread = new Thread (new PortListener(2003));                    //Search Request Thread
 		futhread.setName("Listen For Fileupdate");
 		futhread.start();
+
+	}
+
+	public void FileUnlockThread()
+	{
+		Thread ulthread = new Thread (new PortListener(2004));                    //Search Request Thread
+		ulthread.setName("Listen For Fileupdate");
+		ulthread.start();
 
 	}
 }
