@@ -134,29 +134,19 @@ class PortListener implements Runnable {
 					Connection conn = DriverManager.getConnection(DB_URL, USER, PASS);
 					Statement stmt = conn.createStatement();
 					String sql;
-					if(action_type.equals("0")){
-						sql = "SELECT * from  FileMap where filename ='"+strVal+"' and deleted = 0 and file_permission in (1,2) union SELECT * from  FileMap where HOSTIPADDRESS ='"+senderIp+"' and deleted = 0";
-						//action_type = "7";
-					}else{
-						sql = "SELECT * from  FileMap where filename ='"+strVal+"' and deleted = 0 and file_permission in (1,2)";
-					}
-					if(action_type.equals("5")){
-						sql = sql.replaceAll("and deleted = 0","");
-					}
-					ResultSet rs = stmt.executeQuery(sql);
-					if(rs.next() == false){
-						retval = "File Not Found\n";
-					}else{
-						if(action_type.equals("2")){
-							String peerId = rs.getString("PEERID");
-							String HostIPAddress = rs.getString("HOSTIPADDRESS");
-							String OtherIPAddress = rs.getString("REPLICATE_IPADDRESS");
-							retval = retval + peerId + "("+HostIPAddress+ OtherIPAddress +")\n\r ";
-						}else if(action_type.equals("4")){
-							sql = "UPDATE FileMap set deleted = 1 where filename ='"+strVal+"'";
-							stmt.executeQuery(sql);
-							retval = "File Deletion Succesful";
-						}else if(action_type.equals("7")){
+
+//					if(action_type.equals("0")){
+//						sql = "SELECT * from  FileMap where filename ='"+strVal+"' and deleted = 0 and file_permission in (1,2) union SELECT * from  FileMap where filename ='"+strVal+"' and HOSTIPADDRESS ='"+senderIp+"' and deleted = 0";
+//					}else{
+//						sql = "SELECT * from  FileMap where filename ='"+strVal+"' and deleted = 0 and file_permission in (1,2)";
+//					}
+
+					if(action_type.equals("7"))
+					{
+						sql = "SELECT * from  FileMap where filename ='"+strVal+"' and deleted = 0 and file_permission in (2) union SELECT * from  FileMap where filename ='"+strVal+"' and HOSTIPADDRESS ='"+senderIp+"' and deleted = 0";
+						//sql = "SELECT * from  FileMap where filename ='"+strVal+"' and deleted = 0 and file_permission in (2) union SELECT * from  FileMap where filename ='"+strVal+"' and HOSTIPADDRESS ='"+senderIp+"' and deleted = 0";
+						ResultSet rs0 = stmt.executeQuery(sql);
+						if(rs0.next()){
 							sql = "select is_locked from filemap where filename='"+strVal+"' and deleted = 0";
 							ResultSet rs1 = stmt.executeQuery(sql);
 							rs1.next();
@@ -165,18 +155,49 @@ class PortListener implements Runnable {
 							}else{
 								sql = "update filemap set  is_locked = 1 where filename='"+strVal+"' and deleted = 0";
 								stmt.executeQuery(sql);
-								retval = "File is Locked You can continue Edit";
+								retval = "You can add your content";
 							}
-						}else if(action_type.equals("0")){
-//							sql = "UPDATE FileMap set deleted = 1 where filename ='"+strVal+"'";
-//							stmt.executeQuery(sql);
-							retval = "File Found";
 						}else{
-							sql = "UPDATE FileMap set deleted = 0 where filename ='"+strVal+"'";
-							stmt.executeQuery(sql);
-							retval = "File Reverted Succesful";
+							retval = "You don't have permission to update the File or File Not Found";
+						}
+
+					}else{
+						sql = "SELECT * from  FileMap where filename ='"+strVal+"' and deleted = 0 and file_permission in (1,2) union SELECT * from  FileMap where filename ='"+strVal+"' and HOSTIPADDRESS ='"+senderIp+"' and deleted = 0";
+
+						if(action_type.equals("5")){
+							sql = sql.replaceAll("and deleted = 0","");
+						}
+						ResultSet rs = stmt.executeQuery(sql);
+						if(rs.next() == false){
+							retval = "File Not Found\n";
+						}else{
+							if(action_type.equals("2")){
+								String peerId = rs.getString("PEERID");
+								String HostIPAddress = rs.getString("HOSTIPADDRESS");
+								String OtherIPAddress = rs.getString("REPLICATE_IPADDRESS");
+								retval = retval + peerId + "("+HostIPAddress+ OtherIPAddress +")\n\r ";
+							}else if(action_type.equals("4")){
+								sql = "UPDATE FileMap set deleted = 1 where filename ='"+strVal+"'";
+								stmt.executeQuery(sql);
+								retval = "File Deletion Succesful";
+							}
+//							else if(action_type.equals("7")){
+//
+//
+//							}else if(action_type.equals("0")){
+////							sql = "UPDATE FileMap set deleted = 1 where filename ='"+strVal+"'";
+////							stmt.executeQuery(sql);
+//								retval = "File Found";
+//							}
+							else{
+								sql = "UPDATE FileMap set deleted = 0 where filename ='"+strVal+"'";
+								stmt.executeQuery(sql);
+								retval = "File Reverted Succesful";
+							}
 						}
 					}
+					ResultSet rs = stmt.executeQuery(sql);
+
 
 
 					System.out.println(retval);

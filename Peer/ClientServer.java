@@ -21,7 +21,6 @@ class ListenerPort implements Runnable {
 
 	public ListenerPort(int listen_port) {
 		this.listen_port = listen_port;
-		//flag = true;//Initial Idle state
 		connectionMsg = "Waiting For PEER Connection";
 	}
 
@@ -139,27 +138,32 @@ public class ClientServer {
 	//public String CIS_ip = "10.0.0.13";       //============>IP-address of the CentralIndxServer has to be specified here
 	public String ServerIp = "localhost";       //============>IP-address of the CentralIndxServer has to be specified here
 	//int peer_id;
+	String PeerUniqueId = "1001";
 	String regmessage,searchfilename;
 	ObjectOutputStream out;
 	Socket requestSocket;
 
 	public ClientServer() throws IOException {
+		//Running  Threads
 		AttendFileDownloadRequest();
 		FileReplicate();
 		FileDownload();
 
 		try
 		{
-			FileReader fr = new FileReader("indxip.txt");//read the filename in to filereader object    
-			String val1=new String();
-			BufferedReader br = new BufferedReader(fr);	
-			val1 = br.readLine();
-			System.out.println("IndexServer IP is:" + val1);
-			ServerIp = val1;
+
+			FileReader fileReader = new FileReader("property.txt");
+			String readIp="";
+			BufferedReader br = new BufferedReader(fileReader);
+			readIp = br.readLine();
+			ServerIp = readIp;
+			String PeerId = br.readLine();
+			PeerUniqueId = PeerId;
+			System.out.println("Peer Id is"+PeerId);
 			br.close();
-			fr.close();
+			fileReader.close();
 		} catch(Exception e){
-			System.out.println("Could not read indexserver ip from indxip.txt");
+			System.out.println("Unable to read ip from property file ");
 		}
 
 		System.out.println("||========================================================================================||");
@@ -176,16 +180,10 @@ public class ClientServer {
 			Scanner in = new Scanner(System.in);
 			regmessage = in.nextLine();
 			if (regmessage.equals("1")){
-
-				System.out.println("Enter the String in Format: 4Digit id and File Names separated by Space");
+				System.out.println("Enter File Name To Register to system");
 				regmessage = in.nextLine();
-				String[] val;
-				val = regmessage.split(" ");
-
-				RegisterWithIServer(val[1],"");
-
-
-			}		
+				RegisterWithIServer(regmessage,"3");
+			}
 			if (regmessage.equals("2") || regmessage.equals("4") || regmessage.equals("5")){
 				SearchWithIServer(regmessage);                            //call for searching
 			}
@@ -214,26 +212,32 @@ public class ClientServer {
 			if (regmessage.equals("7")){
 				System.out.println("Enter File Name");
 				String fileName = in.nextLine();
-				System.out.println("Enter File Name");
-				//SearchWithIServer(regmessage);
-				searchfilename = fileName+"$0";
-				if(!searchInServer(searchfilename)){
-					System.out.println("File not found Please create new File");
+				if(updateRequest(fileName+"$7")){
+					File f = new File(fileName);
+					System.out.println("Enter Content to insert");
 					String fileContent = in.nextLine();
-					createFileInSystem(fileName,fileContent,"");
-				}else{
-					searchfilename = fileName+"$7";
-					if(!searchInServer(searchfilename)){
-						File f = new File(fileName);
-						System.out.println("Enter Content to insert");
-						String fileContent = in.nextLine();
-						BufferedWriter bw = new BufferedWriter(new FileWriter(f, true));
-						bw.append(fileContent);
-						bw.close();
-						updateReplicates(fileName,fileContent);
-					}
-
+					BufferedWriter bw = new BufferedWriter(new FileWriter(f, true));
+					bw.append(fileContent);
+					bw.close();
+					updateReplicates(fileName,fileContent);
 				}
+//				if(!searchInServer(searchfilename)){
+//					System.out.println("File not found Please create new File");
+//					String fileContent = in.nextLine();
+//					createFileInSystem(fileName,fileContent,"");
+//				}else{
+//					//searchfilename = fileName+"$7";
+//					if(!searchInServer(searchfilename)){
+//						File f = new File(fileName);
+//						System.out.println("Enter Content to insert");
+//						String fileContent = in.nextLine();
+//						BufferedWriter bw = new BufferedWriter(new FileWriter(f, true));
+//						bw.append(fileContent);
+//						bw.close();
+//						updateReplicates(fileName,fileContent);
+//					}
+//
+//				}
 			}
 			if (regmessage.equals("8")){
 				System.out.println("Reading File.");
@@ -361,9 +365,8 @@ public class ClientServer {
 		Path fileNameObj = Path.of(filename);
 		try {
 			Files.writeString(fileNameObj, filecontent);
-			regmessage = "1001 "+ filename;
+			regmessage = PeerUniqueId+ filename;
 			RegisterWithIServer(filename,filePermission);                          //Register Method call
-			//AttendFileDownloadRequest();
 		} catch (IOException e) {
 			System.err.println("Error while file creation");
 			throw new RuntimeException(e);
@@ -384,7 +387,42 @@ public class ClientServer {
 			searchfilename = in1.nextLine();
 			searchfilename = searchfilename.trim()+"$"+value;
 			searchInServer(searchfilename);
+	}
 
+	public boolean updateRequest(String filename){
+		try{
+			requestSocket = new Socket(ServerIp, 2002);
+			System.out.println("\nUpdate Request Sent To Sever\n");
+			//2. To Get Input and Output streams
+			out = new ObjectOutputStream(requestSocket.getOutputStream());
+			out.flush();
+			out.writeObject(filename);
+			out.flush();
+			ObjectInputStream in = new ObjectInputStream(requestSocket.getInputStream());
+			String strVal = (String)in.readObject();
+			System.out.println(strVal);
+			if (strVal.equals("You can add your content")) {
+				return true;
+			}
+			return false;
+
+		} catch (UnknownHostException e) {
+			throw new RuntimeException(e);
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		} catch (ClassNotFoundException e) {
+			throw new RuntimeException(e);
+		}
+		finally{
+			//4: Closing connection
+			try{
+				out.close();
+				requestSocket.close();
+			}
+			catch(IOException ioException){
+				ioException.printStackTrace();
+			}
+		}
 	}
 
 	public boolean searchInServer(String filename){
@@ -405,6 +443,10 @@ public class ClientServer {
 				System.out.println(strVal);
 				return false;
 			}
+			if(strVal.equals("File is being used by other user please try again later")){
+				System.out.println(strVal);
+				return true;
+			}
 			if(strVal.equals("File Found")  ){
 				System.out.println(strVal);
 				return true;
@@ -418,7 +460,6 @@ public class ClientServer {
 				System.out.println( "File:'"+searchfilename+ "' found at peers:"+strVal+"\n");
 
 			}
-
 		}
 		catch(UnknownHostException unknownHost){                                           //To Handle Unknown Host Exception
 			System.err.println("Cannot Connect to an Unknown Host!");
@@ -472,7 +513,6 @@ public class ClientServer {
 		System.out.println("Enter the File Name to be Downloaded:");      
 		searchfilename = in1.nextLine();                              //Takes from user the desired filename to be downloaded
 
-		//int peerid1 = Integer.parseInt(peerid);
 		try{
 
 			//1. Creating a socket to connect to the Index server
