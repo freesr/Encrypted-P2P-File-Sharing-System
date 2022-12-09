@@ -81,7 +81,7 @@ class PortListener implements Runnable {
 						sql = "select distinct hostipaddress from FileMap where HOSTIPADDRESS NOT IN ('"+ ipstring+"') ORDER BY DBMS_RANDOM.RANDOM  fetch  first 3 rows only";
 						ResultSet resultSet = stmt.executeQuery(sql);
 //						List<String> peersAndIps = new ArrayList<String>();
-						String IpList = "";//+connection.getInetAddress().getHostName()+";";
+						String IpList = "";
 						while (resultSet.next()) {
 							//peersAndIps.add(rs.getString(2));
 							IpList += (resultSet.getString(1)+";");
@@ -196,7 +196,7 @@ class PortListener implements Runnable {
 							}
 						}
 					}
-					ResultSet rs = stmt.executeQuery(sql);
+					//ResultSet rs = stmt.executeQuery(sql);
 
 
 

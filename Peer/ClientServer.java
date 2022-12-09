@@ -6,9 +6,27 @@
 /*=================================================================*/
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.KeySpec;
+import java.util.Base64;
 import java.util.Scanner;
+
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
+
+
 
 //PeerServer
 class ListenerPort implements Runnable {
@@ -190,28 +208,49 @@ public class ClientServer {
 			if (regmessage.equals("3")){
 				DownloadFromPeerServer(regmessage);                       //Download Method call
 			}
-			if(regmessage.equals("6")){
+			if(regmessage.equals("6")) {
 				System.out.println("Enter File Name");
 				String fileName = in.nextLine();
-				searchfilename = fileName+"$2";
-				if(!searchInServer(searchfilename)){
+				String encrypted_fileName = null;
+				String encrypted_fileContent = null;
+				try {
+					encrypted_fileName = encryptDecrypt("12345678", 0, fileName);
+				} catch (InvalidKeyException | NoSuchAlgorithmException | InvalidKeySpecException
+						 | NoSuchPaddingException | IllegalBlockSizeException | BadPaddingException | IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				searchfilename = encrypted_fileName + "$2";
+				if (!searchInServer(searchfilename)) {
 					System.out.println("Enter Content to insert");
 					String fileContent = in.nextLine();
+					try {
+						encrypted_fileContent = encryptDecrypt("12345678", 0, fileContent);
+					} catch (InvalidKeyException | NoSuchAlgorithmException | InvalidKeySpecException
+							 | NoSuchPaddingException | IllegalBlockSizeException | BadPaddingException
+							 | IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
 					System.out.println("Assign File Permission for File Type");
 					System.out.println("1 - read only");
 					System.out.println("2 - read and write");
 					System.out.println("3 - private");
 					String filePermission = in.nextLine();
-					createFileInSystem(fileName,fileContent,filePermission);
-				}else{
+					createFileInSystem(encrypted_fileName, encrypted_fileContent, filePermission);
+				} else {
 					System.out.println("File exist already please use update option");
 				}
-				//check in local directory unregistered files also
-
 			}
+				//check in local directory unregistered files also
 			if (regmessage.equals("7")){
 				System.out.println("Enter File Name");
-				String fileName = in.nextLine();
+				String fileName = null;
+				try {
+					fileName = encryptDecrypt("12345678",0,in.nextLine());
+				} catch (Exception e) {
+					throw new RuntimeException(e);
+				}
 				if(updateRequest(fileName+"$7")){
 					File f = new File(fileName);
 					System.out.println("Enter Content to insert");
@@ -365,7 +404,7 @@ public class ClientServer {
 		Path fileNameObj = Path.of(filename);
 		try {
 			Files.writeString(fileNameObj, filecontent);
-			regmessage = PeerUniqueId+ filename;
+			regmessage = PeerUniqueId+ " "+ filename;
 			RegisterWithIServer(filename,filePermission);                          //Register Method call
 		} catch (IOException e) {
 			System.err.println("Error while file creation");
@@ -384,8 +423,12 @@ public class ClientServer {
 				System.out.println("Enter the File Name to Revert");
 			}
 			Scanner in1 = new Scanner(System.in);                                        //Takes Input from the Peer to search the desired file
-			searchfilename = in1.nextLine();
-			searchfilename = searchfilename.trim()+"$"+value;
+		try {
+			searchfilename = encryptDecrypt("12345678",0,in1.nextLine().trim());
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+		searchfilename = searchfilename+"$"+value;
 			searchInServer(searchfilename);
 	}
 
@@ -510,9 +553,12 @@ public class ClientServer {
 
 		System.out.println("Enter pear IP Address to download file:");
 		String ipadrs = in1.nextLine();
-		System.out.println("Enter the File Name to be Downloaded:");      
-		searchfilename = in1.nextLine();                              //Takes from user the desired filename to be downloaded
-
+		System.out.println("Enter the File Name to be Downloaded:");
+		try {
+			searchfilename = encryptDecrypt("12345678",0,in1.nextLine());
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
 		try{
 
 			//1. Creating a socket to connect to the Index server
@@ -526,10 +572,16 @@ public class ClientServer {
 			ObjectInputStream in = new ObjectInputStream(requestSocket.getInputStream());
 			String strVal = (String)in.readObject();
 
+
 			if(msg.equals("3")){
-				System.out.println( searchfilename+": Downloaded\n");
+				System.out.println( "File Downloaded\n");
 				writetoFile(strVal);
 			}else{
+				try {
+					strVal = encryptDecrypt("12345678",1,strVal);
+				} catch (Exception e) {
+					throw new RuntimeException(e);
+				}
 				System.out.println( strVal);
 			}
 
@@ -578,6 +630,100 @@ public class ClientServer {
 		rthread.setName("AttendFileDownloadRequest");
 		rthread.start();
 
+	}
+
+	public  String encryptDecrypt(String mykey,int ciphermode,String str)
+			throws InvalidKeyException, NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException,IOException, IllegalBlockSizeException, BadPaddingException
+	{
+		// Class private variables
+		final String SECRET_KEY
+				= "my_super_secret_key_ho_ho_ho";
+
+		final String SALT = "ssshhhhhhhhhhh!!!!";
+
+		// This method use to encrypt to string
+		if(ciphermode==0)
+		{
+			try {
+
+				// Create default byte array
+				byte[] iv = { 0, 0, 0, 0, 0, 0, 0, 0,
+						0, 0, 0, 0, 0, 0, 0, 0 };
+				IvParameterSpec ivspec
+						= new IvParameterSpec(iv);
+
+				// Create SecretKeyFactory object
+				SecretKeyFactory factory
+						= SecretKeyFactory.getInstance(
+						"PBKDF2WithHmacSHA256");
+
+				// Create KeySpec object and assign with
+				// constructor
+				KeySpec spec = new PBEKeySpec(
+						SECRET_KEY.toCharArray(), SALT.getBytes(),
+						65536, 256);
+				SecretKey tmp = factory.generateSecret(spec);
+				SecretKeySpec secretKey = new SecretKeySpec(
+						tmp.getEncoded(), "AES");
+
+				Cipher cipher = Cipher.getInstance(
+						"AES/CBC/PKCS5Padding");
+				cipher.init(Cipher.ENCRYPT_MODE, secretKey,
+						ivspec);
+				// Return encrypted string
+				return Base64.getEncoder().encodeToString(
+						cipher.doFinal(str.getBytes(
+								StandardCharsets.UTF_8)));
+			}
+			catch (Exception e) {
+				System.out.println("Error while encrypting: "
+						+ e.toString());
+			}
+			return null;
+		}
+
+		// This method use to decrypt to string
+		if(ciphermode==1)
+		{
+			try {
+
+				// Default byte array
+				byte[] iv = { 0, 0, 0, 0, 0, 0, 0, 0,
+						0, 0, 0, 0, 0, 0, 0, 0 };
+				// Create IvParameterSpec object and assign with
+				// constructor
+				IvParameterSpec ivspec
+						= new IvParameterSpec(iv);
+
+				// Create SecretKeyFactory Object
+				SecretKeyFactory factory
+						= SecretKeyFactory.getInstance(
+						"PBKDF2WithHmacSHA256");
+
+				// Create KeySpec object and assign with
+				// constructor
+				KeySpec spec = new PBEKeySpec(
+						SECRET_KEY.toCharArray(), SALT.getBytes(),
+						65536, 256);
+				SecretKey tmp = factory.generateSecret(spec);
+				SecretKeySpec secretKey = new SecretKeySpec(
+						tmp.getEncoded(), "AES");
+
+				Cipher cipher = Cipher.getInstance(
+						"AES/CBC/PKCS5PADDING");
+				cipher.init(Cipher.DECRYPT_MODE, secretKey,
+						ivspec);
+				// Return decrypted string
+				return new String(cipher.doFinal(
+						Base64.getMimeDecoder().decode(str)));
+			}
+			catch (Exception e) {
+				System.out.println("Error while decrypting: "
+						+ e.toString());
+			}
+			return null;
+		}
+		return str;
 	}
 
 }
