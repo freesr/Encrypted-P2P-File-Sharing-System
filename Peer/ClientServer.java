@@ -242,7 +242,7 @@ public class ClientServer {
 					System.out.println("File exist already please use update option");
 				}
 			}
-				//check in local directory unregistered files also
+
 			if (regmessage.equals("7")){
 				System.out.println("Enter File Name");
 				String fileName = null;
@@ -255,28 +255,18 @@ public class ClientServer {
 					File f = new File(fileName);
 					System.out.println("Enter Content to insert");
 					String fileContent = in.nextLine();
-					BufferedWriter bw = new BufferedWriter(new FileWriter(f, true));
-					bw.append(fileContent);
-					bw.close();
-					updateReplicates(fileName,fileContent);
+					try {
+						fileContent = encryptDecrypt("12345678",0,fileContent);
+						BufferedWriter bw = new BufferedWriter(new FileWriter(f, true));
+						bw.append(fileContent);
+						bw.close();
+						updateReplicates(fileName,fileContent);
+					} catch (Exception e) {
+						throw new RuntimeException(e);
+					}
+
 				}
-//				if(!searchInServer(searchfilename)){
-//					System.out.println("File not found Please create new File");
-//					String fileContent = in.nextLine();
-//					createFileInSystem(fileName,fileContent,"");
-//				}else{
-//					//searchfilename = fileName+"$7";
-//					if(!searchInServer(searchfilename)){
-//						File f = new File(fileName);
-//						System.out.println("Enter Content to insert");
-//						String fileContent = in.nextLine();
-//						BufferedWriter bw = new BufferedWriter(new FileWriter(f, true));
-//						bw.append(fileContent);
-//						bw.close();
-//						updateReplicates(fileName,fileContent);
-//					}
-//
-//				}
+
 			}
 			if (regmessage.equals("8")){
 				System.out.println("Reading File.");
